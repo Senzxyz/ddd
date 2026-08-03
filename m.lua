@@ -1,3 +1,7 @@
+--[[
+    SENZY HUB - Roll Anime to Fight (v5.0 - Information First & Free Script Text)
+]]
+
 if getgenv().AutoRollSystem then
     getgenv().AutoRollSystem.Enabled = false
     if getgenv().AutoRollSystem.Connection then
@@ -16,37 +20,78 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
+---------------------------------------------------------
+-- Configuration Maps & Arrays
+---------------------------------------------------------
 local CharacterRarityMap = {
-    ["Common"] = { "Ussop", "Krillin", "Luffy", "Zoro", "Itadori" },
-    ["Rare"] = { "Goku", "Maki", "Junwoo", "Mob" },
-    ["Epic"] = { "Shinra", "Manji", "Ban", "Guts", "Renji", "Tanjiro", "Piccolo" },
-    ["Legendary"] = { "Erwin", "Gojo", "Grimmjow", "Nanami", "Naruto", "NarutoClone", "Saitama", "Sukuna", "Trunks", "Zenitsu" },
-    ["Mythic"] = { "Ace", "Akaza", "Broly", "Hoshina", "Kisuke", "Kokushibo", "Orihime", "Rengoku", "Simo Hayha", "Stark", "Toji", "Yoruichi" },
-    ["Secret"] = { "Byakuya", "Dio", "Douma", "Frieren", "Gyomei", "Jiren", "Kenpachi", "Mahoraga", "Megumi", "Rika", "Ulquiorra", "Yhwatch", "Yuta" },
-    ["God"] = { "Ainz", "Aizen (Transcendent)", "Beerus", "Death Knight", "Gojo (Shibuya)", "Goku (Black)", "Ichigo", "Muzan", "Muzan (Evolved)", "Rimuru", "Shanks", "Sukuna (Heian)", "Whis", "Yamamoto", "Yorichi" },
-    ["Limited"] = { "Albedo", "Black Frieza", "Britain Army", "Cosmic Garou", "Entoma", "Frieza", "Genos", "Lelouch", "Mash", "Okurun", "Saitama (Serious)", "Sakamoto", "Sakamoto (Fit)", "Shalltear", "Spider (Entoma)", "Yor" }
+    Common = {
+        "Ussop", "Krillin", "Luffy", "Zoro", "Itadori"
+    },
+    Rare = {
+        "Goku", "Maki", "Junwoo", "Mob", "Sakura"
+    },
+    Epic = {
+        "Shinra", "Manji", "Ban", "Guts", "Renji", "Tanjiro", "Piccolo"
+    },
+    Legendary = {
+        "Erwin", "Gojo", "Grimmjow", "Nanami", "Naruto", "NarutoClone", "Saitama", "Sukuna", "Trunks", "Zenitsu"
+    },
+    Mythic = {
+        "Ace", "Akaza", "Broly", "Hoshina", "Kashimo", "Kisuke", "Kokushibo", "Orihime", "Rengoku", "Simo Hayha", "Stark", "Toji", "Yoruichi"
+    },
+    Secret = {
+        "Byakuya", "Dio", "Douma", "Frieren", "Gyomei", "Hakari", "Jiren", "Kenpachi", "Mahoraga", "Megumi", "Mojuro", "Rika", "Ulquiorra", "Yhwatch", "Yuta"
+    },
+    God = {
+        "Ainz", "Aizen (Transcendent)", "Beerus", "Dabura", "Death Knight", "Gojo (Shibuya)", "Goku (Black)", "Ichigo", "Muzan", "Muzan (Evolved)", "Rimuru", "Shanks", "Sukuna (Heian)", "Whis", "Yamamoto", "Yorichi", "Yuji (Modulo)"
+    },
+    Limited = {
+        "Albedo", "Black Frieza", "Britain Army", "Cosmic Garou", "DarkMagician", "DarkMagicianGirl", "Entoma", "Frieza", "Genos", "Hakari (JackPot)", "Juuzou", "Julius", "Katakuri", "Lelouch", "Mash", "Milim", "Okurun", "Saitama (Serious)", "Sakamoto", "Sakamoto (Fit)", "Shalltear", "Spider (Entoma)", "Tatsumaki", "Yor", "Yugi"
+    }
 }
 
-local SecretMutations = {
-    "Astronaut",
-    "Cursed",
-    "Demon",
-    "Destroyer",
-    "Diamond",
-    "Gold",
-    "Hollow",
-    "No Mutation",
-    "Slayer"
+-- Hex Color Code Map for Headers
+local RarityColorMap = {
+    Common    = "#A6A6A6", -- สีเทา
+    Rare      = "#1E90FF", -- สีฟ้า
+    Epic      = "#9370DB", -- สีม่วงอ่อน
+    Legendary = "#FFD700", -- สีทอง
+    Mythic    = "#FF4500", -- สีส้มแดง
+    Secret    = "#8A2BE2", -- สีม่วงเข้ม
+    God       = "#FF0000", -- สีแดงสด
+    Limited   = "#00FFFF"  -- สีฟ้าสว่าง / Cyan
+}
+
+local AllMutations = {
+    "Astronaut", "Cursed", "Demon", "Destroyer", "Diamond", "Gold", "Hollow", "No Mutation", "Slayer"
 }
 
 local LowRarities = { "Common", "Rare", "Epic", "Legendary" }
 local HighRarities = { "Mythic", "Secret", "God", "Limited" }
 
+-- Target Settings (Auto Buy)
 local SelectedTargetCharacters = {}
 local SelectedTargetMutations = {}
 
+-- Auto Sell Filter Settings (Default to ALL FALSE)
+local AutoSellRarities = { ["Common"] = false, ["Rare"] = false, ["Epic"] = false, ["Legendary"] = false }
+local AutoSellCharacters = {}
+local AutoSellMutations = {
+    ["astronaut"] = false,
+    ["cursed"] = false,
+    ["demon"] = false,
+    ["destroyer"] = false,
+    ["diamond"] = false,
+    ["gold"] = false,
+    ["hollow"] = false,
+    ["no mutation"] = false,
+    ["slayer"] = false
+}
+
+-- Global State Flags
 local AutoSummonEnabled = false
 local AutoBuyEnabled = false
+local AutoSellEnabled = false
 local AutoMergeEnabled = false
 local DisplayTagEnabled = false
 
@@ -60,8 +105,22 @@ local MERGE_DELAY = 2.0
 local latestRollData = nil
 local originalDisplayName = LocalPlayer.DisplayName
 
+-- Remote References
 local RollRemote = nil
 local BuyRemote = nil
+local SellRemote = nil
+
+pcall(function()
+    local Remotes = ReplicatedStorage:WaitForChild("Remotes", 5)
+    if Remotes then
+        local Characters = Remotes:WaitForChild("Characters", 5)
+        if Characters then
+            RollRemote = Characters:WaitForChild("Roll", 5)
+            BuyRemote = Characters:WaitForChild("Buy", 5)
+            SellRemote = Characters:WaitForChild("Sell", 5)
+        end
+    end
+end)
 
 local cachedRollPrompts = {}
 local cachedMergePrompts = {}
@@ -70,16 +129,40 @@ local cachedMergePrompts = {}
 -- Helper Functions
 ---------------------------------------------------------
 local function GetRarityOfCharacter(charName)
-    if not charName then return "Unknown" end
-    local lowerName = string.lower(charName)
+    if not charName or charName == "" then return "Unknown" end
     for rarity, list in pairs(CharacterRarityMap) do
         for _, name in ipairs(list) do
-            if string.lower(name) == lowerName then
+            if string.lower(name) == string.lower(charName) then
                 return rarity
             end
         end
     end
     return "Unknown"
+end
+
+local function GetToolUUID(tool)
+    local uuid = tool:GetAttribute("UUID") or tool:GetAttribute("uuid") or tool:GetAttribute("ID") or tool:GetAttribute("Id")
+    if uuid then return tostring(uuid) end
+
+    for _, child in ipairs(tool:GetChildren()) do
+        if child:IsA("ValueBase") then
+            local cName = string.lower(child.Name)
+            if cName:find("uuid") or cName:find("guid") or cName:find("id") then
+                return tostring(child.Value)
+            end
+        end
+    end
+    return nil
+end
+
+local function GetToolMutation(tool)
+    local mut = tool:GetAttribute("Mutation") or tool:GetAttribute("mutation") or tool:GetAttribute("Buff")
+    if mut then return tostring(mut) end
+
+    local mutVal = tool:FindFirstChild("Mutation") or tool:FindFirstChild("Buff")
+    if mutVal and mutVal:IsA("ValueBase") then return tostring(mutVal.Value) end
+
+    return "No Mutation"
 end
 
 local function SendDiscordWebhook(charName, mutationName, rarity)
@@ -93,20 +176,20 @@ local function SendDiscordWebhook(charName, mutationName, rarity)
         mentionText = "<@" .. DiscordUserID:match("%d+") .. ">"
     end
 
-    local colorCode = 65535 -- Default Cyan
-    if rarity == "God" then colorCode = 16711680 -- Red
-    elseif rarity == "Secret" then colorCode = 10181046 -- Purple
-    elseif rarity == "Limited" then colorCode = 16753920 -- Orange
+    local colorCode = 65535
+    if rarity == "God" then colorCode = 16711680
+    elseif rarity == "Secret" then colorCode = 10181046
+    elseif rarity == "Limited" then colorCode = 16753920
     end
 
     local embedData = {
-        ["title"] = "🎉 Auto Buy Success! (SENZY HUB)",
+        ["title"] = "Auto Buy Success - SENZY HUB",
         ["color"] = colorCode,
         ["fields"] = {
-            { ["name"] = "👤 Player", ["value"] = LocalPlayer.Name, ["inline"] = true },
-            { ["name"] = "⭐ Character", ["value"] = charName or "Unknown", ["inline"] = true },
-            { ["name"] = "🔥 Rarity", ["value"] = rarity or "Unknown", ["inline"] = true },
-            { ["name"] = "🧬 Mutation", ["value"] = mutationName or "No Mutation", ["inline"] = true }
+            { ["name"] = "Player", ["value"] = LocalPlayer.Name, ["inline"] = true },
+            { ["name"] = "Character", ["value"] = charName or "Unknown", ["inline"] = true },
+            { ["name"] = "Rarity", ["value"] = rarity or "Unknown", ["inline"] = true },
+            { ["name"] = "Mutation", ["value"] = mutationName or "No Mutation", ["inline"] = true }
         },
         ["footer"] = { ["text"] = "SENZY HUB • " .. os.date("%X") }
     }
@@ -128,31 +211,24 @@ local function SendDiscordWebhook(charName, mutationName, rarity)
     end)
 end
 
-local function ProcessPrompt(prompt)
-    if not prompt:IsA("ProximityPrompt") then return end
-    if prompt.Name == "RollPrompt" then
-        if not table.find(cachedRollPrompts, prompt) then
-            table.insert(cachedRollPrompts, prompt)
-        end
-    else
-        local objectText = tostring(prompt.ObjectText):lower()
-        local actionText = tostring(prompt.ActionText):lower()
-        local promptName = tostring(prompt.Name):lower()
-        
-        if actionText:find("level up") or objectText:find("character slot") or promptName:find("levelup") then
-            if not table.find(cachedMergePrompts, prompt) then
-                table.insert(cachedMergePrompts, prompt)
-            end
-        end
-    end
-end
-
 local function RefreshPromptsCache()
     table.clear(cachedRollPrompts)
     table.clear(cachedMergePrompts)
     
     for _, prompt in ipairs(workspace:GetDescendants()) do
-        ProcessPrompt(prompt)
+        if prompt:IsA("ProximityPrompt") then
+            if prompt.Name == "RollPrompt" then
+                table.insert(cachedRollPrompts, prompt)
+            else
+                local objectText = tostring(prompt.ObjectText):lower()
+                local actionText = tostring(prompt.ActionText):lower()
+                local promptName = tostring(prompt.Name):lower()
+                
+                if actionText:find("level up") or objectText:find("character slot") or promptName:find("levelup") then
+                    table.insert(cachedMergePrompts, prompt)
+                end
+            end
+        end
     end
 end
 
@@ -161,23 +237,29 @@ RefreshPromptsCache()
 workspace.DescendantAdded:Connect(function(desc)
     if desc:IsA("ProximityPrompt") then
         task.wait(0.1)
-        ProcessPrompt(desc)
+        RefreshPromptsCache()
     end
 end)
 
 workspace.DescendantRemoving:Connect(function(desc)
     if desc:IsA("ProximityPrompt") then
-        local idxRoll = table.find(cachedRollPrompts, desc)
-        if idxRoll then table.remove(cachedRollPrompts, idxRoll) end
-        
-        local idxMerge = table.find(cachedMergePrompts, desc)
-        if idxMerge then table.remove(cachedMergePrompts, idxMerge) end
+        for i = #cachedRollPrompts, 1, -1 do
+            if cachedRollPrompts[i] == desc then
+                table.remove(cachedRollPrompts, i)
+            end
+        end
+        for i = #cachedMergePrompts, 1, -1 do
+            if cachedMergePrompts[i] == desc then
+                table.remove(cachedMergePrompts, i)
+            end
+        end
     end
 end)
 
 local function isCharacterSelected(charName)
     if not charName then return false end
-    return SelectedTargetCharacters[string.lower(tostring(charName))] == true
+    local target = string.lower(tostring(charName))
+    return SelectedTargetCharacters[target] == true
 end
 
 local function isMutationSelected(mutationName)
@@ -197,6 +279,9 @@ local function isMutationSelected(mutationName)
     return SelectedTargetMutations[string.lower(tostring(currentMutation))] == true
 end
 
+---------------------------------------------------------
+-- Core Execution Logic
+---------------------------------------------------------
 local function checkAndBuyFromData(data)
     if not data or not AutoBuyEnabled or isBuying then 
         return 
@@ -255,7 +340,6 @@ local function checkAndBuyFromData(data)
                 task.wait(0.1)
             end
 
-            -- Webhook notification trigger
             for _, item in ipairs(matchingSlots) do
                 local rarity = GetRarityOfCharacter(item.charName)
                 if rarity == "God" or rarity == "Secret" or rarity == "Limited" then
@@ -268,27 +352,60 @@ local function checkAndBuyFromData(data)
     end
 end
 
+local function ProcessUUIDSell()
+    if not AutoSellEnabled or not SellRemote then return end
+
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    if not backpack then return end
+
+    for _, item in ipairs(backpack:GetChildren()) do
+        if item:IsA("Tool") then
+            local charName = item.Name
+            local charLower = string.lower(charName)
+            local rarity = GetRarityOfCharacter(charName)
+            local mutation = GetToolMutation(item)
+            local mutLower = string.lower(mutation)
+
+            local isTargetBuy = AutoBuyEnabled and SelectedTargetCharacters[charLower] and (SelectedTargetMutations[mutLower] or next(SelectedTargetMutations) == nil)
+
+            if not isTargetBuy then
+                local rarityAllowed = (AutoSellRarities[rarity] == true)
+                local charAllowed = (AutoSellCharacters[charLower] == true)
+                local mutationAllowed = (AutoSellMutations[mutLower] == true)
+
+                if rarity == "Unknown" and (AutoSellRarities["Common"] or AutoSellRarities["Rare"]) then
+                    rarityAllowed = true
+                end
+
+                if (rarityAllowed or charAllowed) and mutationAllowed then
+                    local uuid = GetToolUUID(item)
+                    if uuid then
+                        pcall(function()
+                            SellRemote:FireServer({ uuid })
+                        end)
+                        task.wait(0.15)
+                    end
+                end
+            end
+        end
+    end
+end
+
 ---------------------------------------------------------
--- UI Setup (Senzy Hub Library)
+-- UI Setup
 ---------------------------------------------------------
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/senzxyz2xxx/Ui/refs/heads/main/main.lua"))()
 
 local Window = Library:Window({
     Title = "Senzy Hub",
-    Footer = "Free Script",
+    Footer = "Free Script", -- เปลี่ยนข้อความ Footer
     Logo = 111116339097216
 })
 
--- TAB 0: INFO & WEBHOOK
-local TabInfo = Window:MakeTab({
-    Title = "Information",
-    Icon = 115960025411300
-})
+-- TAB 0: INFORMATION & WEBHOOK (สร้างขึ้นอันแรกสุด เพื่อให้โชว์เป็นหน้าแรกทันที)
+local TabInfo = Window:MakeTab({ Title = "Information", Icon = 115960025411300 })
 
-TabInfo:Label({
-    Title = "=== SENZY HUB ===",
-    Desc = "Welcome to Senzy Hub Auto Roll System!"
-})
+TabInfo:Label({ Title = "SENZY HUB", Desc = "Anime Roll Automation System" })
 
 TabInfo:Button({
     Title = "Copy Discord Link",
@@ -296,56 +413,45 @@ TabInfo:Button({
     Callback = function()
         if setclipboard then
             setclipboard("https://discord.gg/rhPgnAJE4B")
-            Library:Notify({ Title = "Senzy Hub", Content = "Discord link copied to clipboard!" })
+            Library:Notify({ Title = "Senzy Hub", Content = "Discord link copied to clipboard." })
         end
     end
 })
 
-TabInfo:Label({
-    Title = "=== DISCORD WEBHOOK ===",
-    Desc = "Notifies when Secret/God/Limited character is bought"
+TabInfo:Label({ Title = "DISCORD WEBHOOK", Desc = "Notifies when rare characters are purchased" })
+
+TabInfo:Textbox({
+    Title = "Webhook URL",
+    Desc = "Paste Discord Webhook URL",
+    Value = "",
+    Callback = function(Value) WebhookURL = Value end
 })
 
 TabInfo:Textbox({
-    Title = "Discord Webhook URL",
-    Desc = "Paste your Webhook URL here",
+    Title = "Discord User ID",
+    Desc = "User ID for mentions",
     Value = "",
-    Callback = function(Value)
-        WebhookURL = Value
-    end
-})
-
-TabInfo:Textbox({
-    Title = "Discord User ID (Optional)",
-    Desc = "Enter ID to mention you (e.g. 123456789)",
-    Value = "",
-    Callback = function(Value)
-        DiscordUserID = Value
-    end
+    Callback = function(Value) DiscordUserID = Value end
 })
 
 TabInfo:Button({
-    Title = "Test Webhook Notification",
-    Desc = "Sends a test message to your Webhook",
+    Title = "Test Webhook",
+    Desc = "Send test payload",
     Callback = function()
         if WebhookURL ~= "" then
             SendDiscordWebhook("Test Character", "Demon", "God")
-            Library:Notify({ Title = "Senzy Hub", Content = "Test Webhook sent!" })
+            Library:Notify({ Title = "Senzy Hub", Content = "Test webhook sent." })
         else
-            Library:Notify({ Title = "Error", Content = "Please enter a Webhook URL first!" })
+            Library:Notify({ Title = "Error", Content = "Webhook URL is missing." })
         end
     end
 })
 
 -- TAB 1: MAIN SETTINGS
-local TabMain = Window:MakeTab({
-    Title = "Main Settings",
-    Icon = 115960025411300
-})
+local TabMain = Window:MakeTab({ Title = "Main Settings", Icon = 115960025411300 })
 
 TabMain:Toggle({
     Title = "Auto Summon",
-    Desc = "Automatically Summon",
     Value = false,
     Callback = function(Value)
         AutoSummonEnabled = Value
@@ -355,7 +461,6 @@ TabMain:Toggle({
 
 TabMain:Toggle({
     Title = "Enable Auto Buy",
-    Desc = "Master switch to buy selected characters/mutations",
     Value = false,
     Callback = function(Value)
         AutoBuyEnabled = Value
@@ -366,24 +471,18 @@ TabMain:Toggle({
     end
 })
 
--- TAB 2: COMMON -> LEGENDARY
-local TabLowRarity = Window:MakeTab({
-    Title = "Buy: Normal - Legendary",
-    Icon = 115960025411300
-})
+-- TAB 2: BUY (NORMAL - LEGENDARY)
+local TabLowRarity = Window:MakeTab({ Title = "Buy: Normal - Legendary", Icon = 115960025411300 })
 
 for _, rarityName in ipairs(LowRarities) do
     local charList = CharacterRarityMap[rarityName]
     if charList and #charList > 0 then
-        TabLowRarity:Label({
-            Title = "=== " .. string.upper(rarityName) .. " ===",
-            Desc = "Toggle characters you want to buy"
-        })
+        local colorHex = RarityColorMap[rarityName] or "#FFFFFF"
+        TabLowRarity:Label({ Title = string.format("<font color=\"%s\">%s</font>", colorHex, string.upper(rarityName)) })
 
         for _, charName in ipairs(charList) do
             TabLowRarity:Toggle({
                 Title = charName,
-                Desc = "Buy " .. charName .. " automatically",
                 Value = false,
                 Callback = function(Value)
                     SelectedTargetCharacters[string.lower(charName)] = Value
@@ -397,24 +496,18 @@ for _, rarityName in ipairs(LowRarities) do
     end
 end
 
--- TAB 3: MYTHIC / SECRET / GOD / LIMITED
-local TabHighRarity = Window:MakeTab({
-    Title = "Buy: High Tier",
-    Icon = 115960025411300
-})
+-- TAB 3: BUY (HIGH TIER)
+local TabHighRarity = Window:MakeTab({ Title = "Buy: High Tier", Icon = 115960025411300 })
 
 for _, rarityName in ipairs(HighRarities) do
     local charList = CharacterRarityMap[rarityName]
     if charList and #charList > 0 then
-        TabHighRarity:Label({
-            Title = "=== " .. string.upper(rarityName) .. " ===",
-            Desc = "Toggle high tier characters you want to buy"
-        })
+        local colorHex = RarityColorMap[rarityName] or "#FFFFFF"
+        TabHighRarity:Label({ Title = string.format("<font color=\"%s\">%s</font>", colorHex, string.upper(rarityName)) })
 
         for _, charName in ipairs(charList) do
             TabHighRarity:Toggle({
                 Title = charName,
-                Desc = "Buy " .. charName .. " automatically",
                 Value = false,
                 Callback = function(Value)
                     SelectedTargetCharacters[string.lower(charName)] = Value
@@ -428,21 +521,14 @@ for _, rarityName in ipairs(HighRarities) do
     end
 end
 
--- TAB 4: MUTATIONS FILTER
-local TabMutations = Window:MakeTab({
-    Title = "Mutations Filter",
-    Icon = 115960025411300
-})
+-- TAB 4: BUY MUTATIONS FILTER
+local TabMutations = Window:MakeTab({ Title = "Mutations Filter", Icon = 115960025411300 })
 
-TabMutations:Label({
-    Title = "=== MUTATIONS FILTER ===",
-    Desc = "Select specific mutations to target"
-})
+TabMutations:Label({ Title = "<font color=\"#00FF7F\">TARGET MUTATIONS</font>" })
 
-for _, mutName in ipairs(SecretMutations) do
+for _, mutName in ipairs(AllMutations) do
     TabMutations:Toggle({
         Title = "Mutation: " .. mutName,
-        Desc = "Buy characters with " .. mutName .. " buff",
         Value = false,
         Callback = function(Value)
             SelectedTargetMutations[string.lower(mutName)] = Value
@@ -454,26 +540,62 @@ for _, mutName in ipairs(SecretMutations) do
     })
 end
 
--- TAB 5: AUTO MERGE
-local TabMerge = Window:MakeTab({
-    Title = "Auto Merge",
-    Icon = 115960025411300
+-- TAB 5: AUTO SELL
+local TabAutoSell = Window:MakeTab({ Title = "Auto Sell Settings", Icon = 115960025411300 })
+
+TabAutoSell:Toggle({
+    Title = "Master Auto Sell",
+    Desc = "Automatically sells backpack items matching parameters",
+    Value = false,
+    Callback = function(Value) AutoSellEnabled = Value end
 })
+
+TabAutoSell:Navative()
+TabAutoSell:Label({ Title = "<font color=\"#FFD700\">1. SELL BY RARITY</font>" })
+for _, rarity in ipairs({ "Common", "Rare", "Epic", "Legendary", "Mythic", "Secret", "God", "Limited" }) do
+    TabAutoSell:Toggle({
+        Title = "Sell Rarity: " .. rarity,
+        Value = false,
+        Callback = function(Value) AutoSellRarities[rarity] = Value end
+    })
+end
+
+TabAutoSell:Navative()
+TabAutoSell:Label({ Title = "<font color=\"#00FFFF\">2. SELL BY MUTATION</font>" })
+for _, mutName in ipairs(AllMutations) do
+    TabAutoSell:Toggle({
+        Title = "Sell Mutation: " .. mutName,
+        Value = false,
+        Callback = function(Value) AutoSellMutations[string.lower(mutName)] = Value end
+    })
+end
+
+TabAutoSell:Navative()
+TabAutoSell:Label({ Title = "<font color=\"#FF69B4\">3. SELL SPECIFIC UNITS</font>" })
+for _, rarityName in ipairs({ "Common", "Rare", "Epic", "Legendary", "Mythic" }) do
+    local list = CharacterRarityMap[rarityName]
+    if list then
+        for _, charName in ipairs(list) do
+            TabAutoSell:Toggle({
+                Title = "Sell Unit: " .. charName,
+                Value = false,
+                Callback = function(Value) AutoSellCharacters[string.lower(charName)] = Value end
+            })
+        end
+    end
+end
+
+-- TAB 6: AUTO MERGE
+local TabMerge = Window:MakeTab({ Title = "Auto Merge", Icon = 115960025411300 })
 
 TabMerge:Toggle({
     Title = "Auto Merge (Level Up)",
-    Desc = "Automatically triggers Level Up prompts across slots",
     Value = false,
-    Callback = function(Value)
-        AutoMergeEnabled = Value
-    end
+    Callback = function(Value) AutoMergeEnabled = Value end
 })
 
--- TAB 6: VISUALS & DISPLAY
-local TabVisuals = Window:MakeTab({
-    Title = "Display & Tags",
-    Icon = 115960025411300
-})
+-- TAB 7: VISUALS
+local TabVisuals = Window:MakeTab({ Title = "Display & Tags", Icon = 115960025411300 })
 
 local function UpdateOverheadDisplay(character)
     if not character then return end
@@ -494,7 +616,6 @@ end
 
 TabVisuals:Toggle({
     Title = "Enable Custom Name Tag",
-    Desc = "Overrides overhead display text to 'SENZY HUB ON TOP'",
     Value = false,
     Callback = function(Value)
         DisplayTagEnabled = Value
@@ -511,24 +632,12 @@ LocalPlayer.CharacterAdded:Connect(function(character)
 end)
 
 ---------------------------------------------------------
--- Event Connection & Optimization Loops
+-- Execution Loops
 ---------------------------------------------------------
 task.spawn(function()
-    pcall(function()
-        local RS = ReplicatedStorage
-        local Remotes = RS:WaitForChild("Remotes", 10)
-        if Remotes then
-            local CharactersRemotes = Remotes:WaitForChild("Characters", 10)
-            if CharactersRemotes then
-                RollRemote = CharactersRemotes:WaitForChild("Roll", 10)
-                BuyRemote = CharactersRemotes:WaitForChild("Buy", 10)
-            end
-        end
-    end)
-
     if RollRemote then
         getgenv().AutoRollSystem.Connection = RollRemote.OnClientEvent:Connect(function(...)
-            local args = { ... }
+            local args = {...}
             local charactersList, rollId, plot
             for _, arg in ipairs(args) do
                 if typeof(arg) == "table" then charactersList = arg
@@ -543,6 +652,16 @@ task.spawn(function()
                 checkAndBuyFromData(latestRollData)
             end
         end)
+    end
+end)
+
+-- Auto Sell Loop
+task.spawn(function()
+    while true do
+        if AutoSellEnabled then
+            pcall(ProcessUUIDSell)
+        end
+        task.wait(1.0)
     end
 end)
 
@@ -583,3 +702,9 @@ task.spawn(function()
         task.wait(MERGE_DELAY)
     end
 end)
+
+Library:Notify({
+    Title = "Senzy Hub Loaded",
+    Content = "v5.0 - Free Script Updated!",
+    Duration = 5
+})
