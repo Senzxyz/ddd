@@ -168,6 +168,7 @@ end
 local function SendDiscordWebhook(charName, mutationName, rarity)
     if WebhookURL == "" or not WebhookURL:find("http") then return end
 
+    -- ตรวจสอบฟังก์ชัน HTTP Request ที่รองรับโดย Executor ทุกค่าย
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     if not requestFunc then return end
 
@@ -176,20 +177,26 @@ local function SendDiscordWebhook(charName, mutationName, rarity)
         mentionText = "<@" .. DiscordUserID:match("%d+") .. ">"
     end
 
-    local colorCode = 65535
-    if rarity == "God" then colorCode = 16711680
-    elseif rarity == "Secret" then colorCode = 10181046
-    elseif rarity == "Limited" then colorCode = 16753920
+    -- กำหนดสี Embed ตาม Rarity
+    local colorCode = 0x00FFFF
+    if rarity == "God" then colorCode = 0xFF0000
+    elseif rarity == "Secret" then colorCode = 0x8A2BE2
+    elseif rarity == "Mythic" then colorCode = 0xFF4500
+    elseif rarity == "Limited" then colorCode = 0x00FFFF
+    elseif rarity == "Legendary" then colorCode = 0xFFD700
     end
 
+    local headshotUrl = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png", LocalPlayer.UserId)
+
     local embedData = {
-        ["title"] = "Auto Buy Success - SENZY HUB",
+        ["title"] = "🎉 Auto Buy Success - SENZY HUB",
         ["color"] = colorCode,
+        ["thumbnail"] = { ["url"] = headshotUrl },
         ["fields"] = {
-            { ["name"] = "Player", ["value"] = LocalPlayer.Name, ["inline"] = true },
-            { ["name"] = "Character", ["value"] = charName or "Unknown", ["inline"] = true },
-            { ["name"] = "Rarity", ["value"] = rarity or "Unknown", ["inline"] = true },
-            { ["name"] = "Mutation", ["value"] = mutationName or "No Mutation", ["inline"] = true }
+            { ["name"] = "👤 Player", ["value"] = LocalPlayer.Name, ["inline"] = true },
+            { ["name"] = "⚔️ Character", ["value"] = charName or "Unknown", ["inline"] = true },
+            { ["name"] = "⭐ Rarity", ["value"] = rarity or "Unknown", ["inline"] = true },
+            { ["name"] = "🧬 Mutation", ["value"] = mutationName or "No Mutation", ["inline"] = true }
         },
         ["footer"] = { ["text"] = "SENZY HUB • " .. os.date("%X") }
     }
@@ -342,7 +349,7 @@ local function checkAndBuyFromData(data)
 
             for _, item in ipairs(matchingSlots) do
                 local rarity = GetRarityOfCharacter(item.charName)
-                if rarity == "God" or rarity == "Secret" or rarity == "Limited" then
+                if rarity == "God" or rarity == "Secret" or rarity == "Limited" or rarity == "Mythic" then
                     SendDiscordWebhook(item.charName, item.charMutation, rarity)
                 end
             end
@@ -352,39 +359,66 @@ local function checkAndBuyFromData(data)
     end
 end
 
+-- แก้ไขการสแกน UUID และยูนิตให้ครอบคลุมทั้ง Character และ Backpack
 local function ProcessUUIDSell()
     if not AutoSellEnabled or not SellRemote then return end
 
+    local itemsToScan = {}
     local backpack = LocalPlayer:FindFirstChild("Backpack")
-    if not backpack then return end
+    local character = LocalPlayer.Character
 
-    for _, item in ipairs(backpack:GetChildren()) do
-        if item:IsA("Tool") then
-            local charName = item.Name
-            local charLower = string.lower(charName)
-            local rarity = GetRarityOfCharacter(charName)
-            local mutation = GetToolMutation(item)
-            local mutLower = string.lower(mutation)
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") then
+                table.insert(itemsToScan, item)
+            end
+        end
+    end
 
-            local isTargetBuy = AutoBuyEnabled and SelectedTargetCharacters[charLower] and (SelectedTargetMutations[mutLower] or next(SelectedTargetMutations) == nil)
+    if character then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Tool") then
+                table.insert(itemsToScan, item)
+            end
+        end
+    end
 
-            if not isTargetBuy then
-                local rarityAllowed = (AutoSellRarities[rarity] == true)
-                local charAllowed = (AutoSellCharacters[charLower] == true)
-                local mutationAllowed = (AutoSellMutations[mutLower] == true)
+    for _, item in ipairs(itemsToScan) do
+        local charName = item.Name
+        local charLower = string.lower(charName)
+        local rarity = GetRarityOfCharacter(charName)
+        local mutation = GetToolMutation(item)
+        local mutLower = string.lower(mutation)
 
-                if rarity == "Unknown" and (AutoSellRarities["Common"] or AutoSellRarities["Rare"]) then
-                    rarityAllowed = true
+        local isTargetBuy = AutoBuyEnabled and SelectedTargetCharacters[charLower] and (SelectedTargetMutations[mutLower] or next(SelectedTargetMutations) == nil)
+
+        if not isTargetBuy then
+            local rarityAllowed = (AutoSellRarities[rarity] == true)
+            local charAllowed = (AutoSellCharacters[charLower] == true)
+            local mutationAllowed = (AutoSellMutations[mutLower] == true)
+
+            -- เช็คว่าผู้เล่นได้เปิดใช้งาน Filter Mutation ตัวไหนไว้บ้างหรือไม่
+            local hasMutationFilter = false
+            for _, val in pairs(AutoSellMutations) do
+                if val == true then 
+                    hasMutationFilter = true 
+                    break 
                 end
+            end
 
-                if (rarityAllowed or charAllowed) and mutationAllowed then
-                    local uuid = GetToolUUID(item)
-                    if uuid then
-                        pcall(function()
-                            SellRemote:FireServer({ uuid })
-                        end)
-                        task.wait(0.15)
-                    end
+            local finalMutationCheck = hasMutationFilter and mutationAllowed or true
+
+            if rarity == "Unknown" and (AutoSellRarities["Common"] or AutoSellRarities["Rare"]) then
+                rarityAllowed = true
+            end
+
+            if (rarityAllowed or charAllowed) and finalMutationCheck then
+                local uuid = GetToolUUID(item)
+                if uuid then
+                    pcall(function()
+                        SellRemote:FireServer({ uuid })
+                    end)
+                    task.wait(0.15)
                 end
             end
         end
@@ -398,11 +432,11 @@ local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/senzx
 
 local Window = Library:Window({
     Title = "Senzy Hub",
-    Footer = "Free Script", -- เปลี่ยนข้อความ Footer
+    Footer = "Free Script",
     Logo = 111116339097216
 })
 
--- TAB 0: INFORMATION & WEBHOOK (สร้างขึ้นอันแรกสุด เพื่อให้โชว์เป็นหน้าแรกทันที)
+-- TAB 0: INFORMATION & WEBHOOK
 local TabInfo = Window:MakeTab({ Title = "Information", Icon = 115960025411300 })
 
 TabInfo:Label({ Title = "SENZY HUB", Desc = "Anime Roll Automation System" })
