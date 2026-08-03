@@ -1,5 +1,5 @@
 --[[
-    SENZY HUB - Roll Anime to Fight (v5.0 - Information First & Free Script Text)
+    SENZY HUB - Roll Anime to Fight (v5.2 - Added Anti-AFK & FPS Booster)
 ]]
 
 if getgenv().AutoRollSystem then
@@ -18,6 +18,8 @@ getgenv().AutoRollSystem = {
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local Lighting = game:GetService("Lighting")
+local VirtualUser = game:GetService("VirtualUser")
 local LocalPlayer = Players.LocalPlayer
 
 ---------------------------------------------------------
@@ -52,14 +54,14 @@ local CharacterRarityMap = {
 
 -- Hex Color Code Map for Headers
 local RarityColorMap = {
-    Common    = "#A6A6A6", -- สีเทา
-    Rare      = "#1E90FF", -- สีฟ้า
-    Epic      = "#9370DB", -- สีม่วงอ่อน
-    Legendary = "#FFD700", -- สีทอง
-    Mythic    = "#FF4500", -- สีส้มแดง
-    Secret    = "#8A2BE2", -- สีม่วงเข้ม
-    God       = "#FF0000", -- สีแดงสด
-    Limited   = "#00FFFF"  -- สีฟ้าสว่าง / Cyan
+    Common    = "#A6A6A6",
+    Rare      = "#1E90FF",
+    Epic      = "#9370DB",
+    Legendary = "#FFD700",
+    Mythic    = "#FF4500",
+    Secret    = "#8A2BE2",
+    God       = "#FF0000",
+    Limited   = "#00FFFF"
 }
 
 local AllMutations = {
@@ -94,10 +96,12 @@ local AutoBuyEnabled = false
 local AutoSellEnabled = false
 local AutoMergeEnabled = false
 local DisplayTagEnabled = false
+local AntiAFKEnabled = false
 
 -- Webhook Settings
 local WebhookURL = ""
 local DiscordUserID = ""
+local sentWebhookCache = {}
 
 local isBuying = false
 local ROLL_SPEED = 1.6
@@ -165,10 +169,17 @@ local function GetToolMutation(tool)
     return "No Mutation"
 end
 
+-- Webhook Function with Anti-Duplicate Logic and senz2.png Logo
 local function SendDiscordWebhook(charName, mutationName, rarity)
     if WebhookURL == "" or not WebhookURL:find("http") then return end
 
-    -- ตรวจสอบฟังก์ชัน HTTP Request ที่รองรับโดย Executor ทุกค่าย
+    local cacheKey = string.format("%s_%s", tostring(charName), tostring(mutationName))
+    local currentTime = os.time()
+    if sentWebhookCache[cacheKey] and (currentTime - sentWebhookCache[cacheKey]) < 5 then
+        return
+    end
+    sentWebhookCache[cacheKey] = currentTime
+
     local requestFunc = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
     if not requestFunc then return end
 
@@ -177,31 +188,45 @@ local function SendDiscordWebhook(charName, mutationName, rarity)
         mentionText = "<@" .. DiscordUserID:match("%d+") .. ">"
     end
 
-    -- กำหนดสี Embed ตาม Rarity
-    local colorCode = 0x00FFFF
-    if rarity == "God" then colorCode = 0xFF0000
-    elseif rarity == "Secret" then colorCode = 0x8A2BE2
-    elseif rarity == "Mythic" then colorCode = 0xFF4500
+    local colorCode = 0x2B2D31
+    if rarity == "God" then colorCode = 0xFF0055
+    elseif rarity == "Secret" then colorCode = 0xA020F0
     elseif rarity == "Limited" then colorCode = 0x00FFFF
+    elseif rarity == "Mythic" then colorCode = 0xFF6600
     elseif rarity == "Legendary" then colorCode = 0xFFD700
+    elseif rarity == "Epic" then colorCode = 0x9370DB
     end
 
-    local headshotUrl = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png", LocalPlayer.UserId)
+    local playerAvatarUrl = string.format("https://www.roblox.com/headshot-thumbnail/image?userId=%d&width=420&height=420&format=png", LocalPlayer.UserId)
+    local logoUrl = "https://raw.githubusercontent.com/senzxyz2xxx/Ui/refs/heads/main/senz2.png"
 
     local embedData = {
-        ["title"] = "🎉 Auto Buy Success - SENZY HUB",
+        ["title"] = "✨ AUTO BUY SUCCESSFUL!",
+        ["description"] = string.format("> 🎉 **%s** has successfully obtained a target unit!", LocalPlayer.DisplayName),
         ["color"] = colorCode,
-        ["thumbnail"] = { ["url"] = headshotUrl },
-        ["fields"] = {
-            { ["name"] = "👤 Player", ["value"] = LocalPlayer.Name, ["inline"] = true },
-            { ["name"] = "⚔️ Character", ["value"] = charName or "Unknown", ["inline"] = true },
-            { ["name"] = "⭐ Rarity", ["value"] = rarity or "Unknown", ["inline"] = true },
-            { ["name"] = "🧬 Mutation", ["value"] = mutationName or "No Mutation", ["inline"] = true }
+        ["author"] = {
+            ["name"] = "SENZY HUB • AUTOMATION",
+            ["icon_url"] = logoUrl
         },
-        ["footer"] = { ["text"] = "SENZY HUB • " .. os.date("%X") }
+        ["thumbnail"] = {
+            ["url"] = logoUrl
+        },
+        ["fields"] = {
+            { ["name"] = "👤 Player Name", ["value"] = string.format("```%s (@%s)```", LocalPlayer.DisplayName, LocalPlayer.Name), ["inline"] = false },
+            { ["name"] = "⚔️ Character", ["value"] = string.format("**` %s `**", charName or "Unknown"), ["inline"] = true },
+            { ["name"] = "👑 Rarity", ["value"] = string.format("**` %s `**", rarity or "Unknown"), ["inline"] = true },
+            { ["name"] = "🧬 Mutation", ["value"] = string.format("**` %s `**", mutationName or "No Mutation"), ["inline"] = true }
+        },
+        ["footer"] = {
+            ["text"] = "SENZY HUB LOG SYSTEM",
+            ["icon_url"] = playerAvatarUrl
+        },
+        ["timestamp"] = os.date("!%Y-%m-%dT%H:%M:%SZ")
     }
 
     local payload = HttpService:JSONEncode({
+        ["username"] = "SENZY HUB NOTIFIER",
+        ["avatar_url"] = logoUrl,
         ["content"] = mentionText ~= "" and mentionText or nil,
         ["embeds"] = { embedData }
     })
@@ -349,9 +374,7 @@ local function checkAndBuyFromData(data)
 
             for _, item in ipairs(matchingSlots) do
                 local rarity = GetRarityOfCharacter(item.charName)
-                if rarity == "God" or rarity == "Secret" or rarity == "Limited" or rarity == "Mythic" then
-                    SendDiscordWebhook(item.charName, item.charMutation, rarity)
-                end
+                SendDiscordWebhook(item.charName, item.charMutation, rarity)
             end
 
             isBuying = false
@@ -359,7 +382,6 @@ local function checkAndBuyFromData(data)
     end
 end
 
--- แก้ไขการสแกน UUID และยูนิตให้ครอบคลุมทั้ง Character และ Backpack
 local function ProcessUUIDSell()
     if not AutoSellEnabled or not SellRemote then return end
 
@@ -397,7 +419,6 @@ local function ProcessUUIDSell()
             local charAllowed = (AutoSellCharacters[charLower] == true)
             local mutationAllowed = (AutoSellMutations[mutLower] == true)
 
-            -- เช็คว่าผู้เล่นได้เปิดใช้งาน Filter Mutation ตัวไหนไว้บ้างหรือไม่
             local hasMutationFilter = false
             for _, val in pairs(AutoSellMutations) do
                 if val == true then 
@@ -452,7 +473,7 @@ TabInfo:Button({
     end
 })
 
-TabInfo:Label({ Title = "DISCORD WEBHOOK", Desc = "Notifies when rare characters are purchased" })
+TabInfo:Label({ Title = "DISCORD WEBHOOK", Desc = "Notifies when your selected characters are purchased" })
 
 TabInfo:Textbox({
     Title = "Webhook URL",
@@ -470,10 +491,10 @@ TabInfo:Textbox({
 
 TabInfo:Button({
     Title = "Test Webhook",
-    Desc = "Send test payload",
+    Desc = "Send test notification payload",
     Callback = function()
         if WebhookURL ~= "" then
-            SendDiscordWebhook("Test Character", "Demon", "God")
+            SendDiscordWebhook("Ainz", "Demon", "God")
             Library:Notify({ Title = "Senzy Hub", Content = "Test webhook sent." })
         else
             Library:Notify({ Title = "Error", Content = "Webhook URL is missing." })
@@ -628,7 +649,79 @@ TabMerge:Toggle({
     Callback = function(Value) AutoMergeEnabled = Value end
 })
 
--- TAB 7: VISUALS
+-- TAB 7: PERFORMANCE (ANTI-AFK & FPS BOOSTER)
+local TabPerformance = Window:MakeTab({ Title = "Performance", Icon = 115960025411300 })
+
+TabPerformance:Label({ Title = "<font color=\"#00FF7F\">ANTI-AFK SYSTEM</font>" })
+
+TabPerformance:Toggle({
+    Title = "Anti-AFK Disconnect",
+    Desc = "Prevents getting kicked after 20 minutes of inactivity",
+    Value = true,
+    Callback = function(Value)
+        AntiAFKEnabled = Value
+    end
+})
+
+-- Anti-AFK Loop Connection
+LocalPlayer.Idled:Connect(function()
+    if AntiAFKEnabled then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+    end
+end)
+
+TabPerformance:Navative()
+TabPerformance:Label({ Title = "<font color=\"#FFD700\">FPS BOOSTER & ANTI-LAG</font>" })
+
+TabPerformance:Button({
+    Title = "Boost FPS & Reduce Lag",
+    Desc = "Disables shadows, fog, and caps FPS higher",
+    Callback = function()
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            Lighting.ShadowSoftness = 0
+            if setfpscap then setfpscap(240) end
+            Library:Notify({ Title = "Performance", Content = "FPS Boost Applied!" })
+        end)
+    end
+})
+
+TabPerformance:Button({
+    Title = "Full Potato Graphics (Lowest Quality)",
+    Desc = "Changes materials to SmoothPlastic & removes textures",
+    Callback = function()
+        pcall(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("BasePart") and not v:IsA("MeshPart") then
+                    v.Material = Enum.Material.SmoothPlastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") then
+                    v:Destroy()
+                end
+            end
+            Library:Notify({ Title = "Performance", Content = "Potato Graphics Enabled!" })
+        end)
+    end
+})
+
+TabPerformance:Button({
+    Title = "Remove Effects & Particles",
+    Desc = "Removes ParticleEmitters, Trails, and Beams",
+    Callback = function()
+        pcall(function()
+            for _, v in ipairs(workspace:GetDescendants()) do
+                if v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Smoke") or v:IsA("Fire") or v:IsA("Sparkles") or v:IsA("Beam") then
+                    v:Destroy()
+                end
+            end
+            Library:Notify({ Title = "Performance", Content = "Effects Cleared!" })
+        end)
+    end
+})
+
+-- TAB 8: VISUALS
 local TabVisuals = Window:MakeTab({ Title = "Display & Tags", Icon = 115960025411300 })
 
 local function UpdateOverheadDisplay(character)
@@ -739,6 +832,6 @@ end)
 
 Library:Notify({
     Title = "Senzy Hub Loaded",
-    Content = "v5.0 - Free Script Updated!",
+    Content = "v5.2 - Anti-AFK & FPS Booster Ready!",
     Duration = 5
 })
