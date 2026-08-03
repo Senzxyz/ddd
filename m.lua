@@ -1,5 +1,5 @@
 --[[
-    SENZY HUB - Roll Anime to Fight (v5.2 - Added Anti-AFK & FPS Booster)
+    SENZY HUB - Roll Anime to Fight (v5.4 - Rarity-Grouped Mutation Filter)
 ]]
 
 if getgenv().AutoRollSystem then
@@ -73,7 +73,8 @@ local HighRarities = { "Mythic", "Secret", "God", "Limited" }
 
 -- Target Settings (Auto Buy)
 local SelectedTargetCharacters = {}
-local SelectedTargetMutations = {}
+-- Format: SelectedRarityMutations["rarity_name"]["mutation_name"] = true/false
+local SelectedRarityMutations = {}
 
 -- Auto Sell Filter Settings (Default to ALL FALSE)
 local AutoSellRarities = { ["Common"] = false, ["Rare"] = false, ["Epic"] = false, ["Legendary"] = false }
@@ -169,7 +170,7 @@ local function GetToolMutation(tool)
     return "No Mutation"
 end
 
--- Webhook Function with Anti-Duplicate Logic and senz2.png Logo
+-- Webhook Function
 local function SendDiscordWebhook(charName, mutationName, rarity)
     if WebhookURL == "" or not WebhookURL:find("http") then return end
 
@@ -288,16 +289,27 @@ workspace.DescendantRemoving:Connect(function(desc)
     end
 end)
 
-local function isCharacterSelected(charName)
+-- Checks whether Character + Rarity Mutation condition is met
+local function isCharacterAndRarityMutationSelected(charName, mutationName)
     if not charName then return false end
-    local target = string.lower(tostring(charName))
-    return SelectedTargetCharacters[target] == true
-end
+    local charLower = string.lower(tostring(charName))
+    
+    -- Check if character is toggled ON
+    if not SelectedTargetCharacters[charLower] then
+        return false
+    end
 
-local function isMutationSelected(mutationName)
+    local rarity = GetRarityOfCharacter(charName)
+    local rarityLower = string.lower(rarity)
+    local currentMutation = string.lower(tostring(mutationName or "No Mutation"))
+    
+    SelectedRarityMutations[rarityLower] = SelectedRarityMutations[rarityLower] or {}
+    local rarityMutations = SelectedRarityMutations[rarityLower]
+
+    -- If no mutation is toggled for this rarity, allow all mutations for this character
     local hasAnyMutationSelected = false
-    for _, state in pairs(SelectedTargetMutations) do
-        if state == true then
+    for _, isSelected in pairs(rarityMutations) do
+        if isSelected == true then
             hasAnyMutationSelected = true
             break
         end
@@ -307,8 +319,7 @@ local function isMutationSelected(mutationName)
         return true
     end
 
-    local currentMutation = mutationName or "No Mutation"
-    return SelectedTargetMutations[string.lower(tostring(currentMutation))] == true
+    return rarityMutations[currentMutation] == true
 end
 
 ---------------------------------------------------------
@@ -332,7 +343,7 @@ local function checkAndBuyFromData(data)
             local charMutation = charData.Mutation or charData.mutation or charData.Buff or "No Mutation"
             local slotIndex = tonumber(slotKey) or charData.Slot or charData.slot
 
-            if isCharacterSelected(charName) and isMutationSelected(charMutation) then
+            if isCharacterAndRarityMutationSelected(charName, charMutation) then
                 table.insert(matchingSlots, {
                     slotIndex = slotIndex or slotKey,
                     charData = charData,
@@ -412,7 +423,7 @@ local function ProcessUUIDSell()
         local mutation = GetToolMutation(item)
         local mutLower = string.lower(mutation)
 
-        local isTargetBuy = AutoBuyEnabled and SelectedTargetCharacters[charLower] and (SelectedTargetMutations[mutLower] or next(SelectedTargetMutations) == nil)
+        local isTargetBuy = AutoBuyEnabled and isCharacterAndRarityMutationSelected(charName, mutation)
 
         if not isTargetBuy then
             local rarityAllowed = (AutoSellRarities[rarity] == true)
@@ -526,76 +537,65 @@ TabMain:Toggle({
     end
 })
 
--- TAB 2: BUY (NORMAL - LEGENDARY)
-local TabLowRarity = Window:MakeTab({ Title = "Buy: Normal - Legendary", Icon = 115960025411300 })
+---------------------------------------------------------
+-- Helper UI Generator: Characters + Rarity-Grouped Mutations
+---------------------------------------------------------
+local function CreateRarityGroupedUI(tabTarget, rarityList)
+    for _, rarityName in ipairs(rarityList) do
+        local charList = CharacterRarityMap[rarityName]
+        if charList and #charList > 0 then
+            local colorHex = RarityColorMap[rarityName] or "#FFFFFF"
+            local rarityLower = string.lower(rarityName)
+            
+            TabTargetLabel = tabTarget:Label({ Title = string.format("<font color=\"%s\">=== %s ===</font>", colorHex, string.upper(rarityName)) })
 
-for _, rarityName in ipairs(LowRarities) do
-    local charList = CharacterRarityMap[rarityName]
-    if charList and #charList > 0 then
-        local colorHex = RarityColorMap[rarityName] or "#FFFFFF"
-        TabLowRarity:Label({ Title = string.format("<font color=\"%s\">%s</font>", colorHex, string.upper(rarityName)) })
-
-        for _, charName in ipairs(charList) do
-            TabLowRarity:Toggle({
-                Title = charName,
-                Value = false,
-                Callback = function(Value)
-                    SelectedTargetCharacters[string.lower(charName)] = Value
-                    if AutoBuyEnabled and latestRollData then
-                        isBuying = false
-                        checkAndBuyFromData(latestRollData)
+            -- Character Toggles for this Rarity
+            for _, charName in ipairs(charList) do
+                local charLower = string.lower(charName)
+                tabTarget:Toggle({
+                    Title = "Buy: " .. charName,
+                    Value = false,
+                    Callback = function(Value)
+                        SelectedTargetCharacters[charLower] = Value
+                        if AutoBuyEnabled and latestRollData then
+                            isBuying = false
+                            checkAndBuyFromData(latestRollData)
+                        end
                     end
-                end
-            })
+                })
+            end
+
+            -- Sub-heading for Mutations of this Rarity
+            tabTarget:Label({ Title = string.format("<font color=\"%s\">└─ Mut Filter (%s)</font>", colorHex, rarityName) })
+            SelectedRarityMutations[rarityLower] = SelectedRarityMutations[rarityLower] or {}
+
+            for _, mutName in ipairs(AllMutations) do
+                local mutLower = string.lower(mutName)
+                tabTarget:Toggle({
+                    Title = "    " .. mutName,
+                    Value = false,
+                    Callback = function(Value)
+                        SelectedRarityMutations[rarityLower][mutLower] = Value
+                        if AutoBuyEnabled and latestRollData then
+                            isBuying = false
+                            checkAndBuyFromData(latestRollData)
+                        end
+                    end
+                })
+            end
         end
     end
 end
+
+-- TAB 2: BUY (NORMAL - LEGENDARY)
+local TabLowRarity = Window:MakeTab({ Title = "Buy: Normal - Legendary", Icon = 115960025411300 })
+CreateRarityGroupedUI(TabLowRarity, LowRarities)
 
 -- TAB 3: BUY (HIGH TIER)
 local TabHighRarity = Window:MakeTab({ Title = "Buy: High Tier", Icon = 115960025411300 })
+CreateRarityGroupedUI(TabHighRarity, HighRarities)
 
-for _, rarityName in ipairs(HighRarities) do
-    local charList = CharacterRarityMap[rarityName]
-    if charList and #charList > 0 then
-        local colorHex = RarityColorMap[rarityName] or "#FFFFFF"
-        TabHighRarity:Label({ Title = string.format("<font color=\"%s\">%s</font>", colorHex, string.upper(rarityName)) })
-
-        for _, charName in ipairs(charList) do
-            TabHighRarity:Toggle({
-                Title = charName,
-                Value = false,
-                Callback = function(Value)
-                    SelectedTargetCharacters[string.lower(charName)] = Value
-                    if AutoBuyEnabled and latestRollData then
-                        isBuying = false
-                        checkAndBuyFromData(latestRollData)
-                    end
-                end
-            })
-        end
-    end
-end
-
--- TAB 4: BUY MUTATIONS FILTER
-local TabMutations = Window:MakeTab({ Title = "Mutations Filter", Icon = 115960025411300 })
-
-TabMutations:Label({ Title = "<font color=\"#00FF7F\">TARGET MUTATIONS</font>" })
-
-for _, mutName in ipairs(AllMutations) do
-    TabMutations:Toggle({
-        Title = "Mutation: " .. mutName,
-        Value = false,
-        Callback = function(Value)
-            SelectedTargetMutations[string.lower(mutName)] = Value
-            if AutoBuyEnabled and latestRollData then
-                isBuying = false
-                checkAndBuyFromData(latestRollData)
-            end
-        end
-    })
-end
-
--- TAB 5: AUTO SELL
+-- TAB 4: AUTO SELL
 local TabAutoSell = Window:MakeTab({ Title = "Auto Sell Settings", Icon = 115960025411300 })
 
 TabAutoSell:Toggle({
@@ -640,7 +640,7 @@ for _, rarityName in ipairs({ "Common", "Rare", "Epic", "Legendary", "Mythic" })
     end
 end
 
--- TAB 6: AUTO MERGE
+-- TAB 5: AUTO MERGE
 local TabMerge = Window:MakeTab({ Title = "Auto Merge", Icon = 115960025411300 })
 
 TabMerge:Toggle({
@@ -649,7 +649,7 @@ TabMerge:Toggle({
     Callback = function(Value) AutoMergeEnabled = Value end
 })
 
--- TAB 7: PERFORMANCE (ANTI-AFK & FPS BOOSTER)
+-- TAB 6: PERFORMANCE (ANTI-AFK & FPS BOOSTER)
 local TabPerformance = Window:MakeTab({ Title = "Performance", Icon = 115960025411300 })
 
 TabPerformance:Label({ Title = "<font color=\"#00FF7F\">ANTI-AFK SYSTEM</font>" })
@@ -663,7 +663,6 @@ TabPerformance:Toggle({
     end
 })
 
--- Anti-AFK Loop Connection
 LocalPlayer.Idled:Connect(function()
     if AntiAFKEnabled then
         VirtualUser:CaptureController()
@@ -721,7 +720,7 @@ TabPerformance:Button({
     end
 })
 
--- TAB 8: VISUALS
+-- TAB 7: VISUALS
 local TabVisuals = Window:MakeTab({ Title = "Display & Tags", Icon = 115960025411300 })
 
 local function UpdateOverheadDisplay(character)
@@ -832,6 +831,6 @@ end)
 
 Library:Notify({
     Title = "Senzy Hub Loaded",
-    Content = "v5.2 - Anti-AFK & FPS Booster Ready!",
+    Content = "v5.4 - Rarity-Grouped Mutation Filter Ready!",
     Duration = 5
 })
