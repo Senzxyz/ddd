@@ -68,10 +68,10 @@ local Config = {
     SelectedCharacters = {},
     SelectedMutations = {},
     
-    -- Method 2 Filters (New)
+    -- Method 2 Filters (New) - Multi-Unit v11.0
     Method2_Enabled = false,
-    Method2_Units = {}, -- Format: ["aizen"] = { Rarity = { God = true, Secret = true, All = false } }
-    Method2_Mutations = {}, -- Format: ["god"] = { demon = true }
+    Method2_Units = {}, -- Format: ["ainz"] = { Rarities = {god=true}, Mutations = {demon=true} }
+    Method2_UnitList = {}, -- Display names of selected units
     
     SellRarities = { Common = false, Rare = false, Epic = false, Legendary = false, Mythic = false, Secret = false, God = false, Limited = false },
     SellCharacters = {},
@@ -204,6 +204,78 @@ local function CountInventoryItems(charName, mutationName)
 end
 
 -- Filter Logic supporting Method 1 and Method 2
+-- Method 2 Multi-Unit System Variables & Helpers
+local currentM2ConfigUnit = nil
+
+local function UpdateM2ConfigUnitSelector()
+    local list = {}
+    for _, name in ipairs(Config.Method2_UnitList or {}) do
+        table.insert(list, name)
+    end
+    if UIElements.Dropdowns["M2_ConfigUnitSelector"] then
+        pcall(function()
+            local elem = UIElements.Dropdowns["M2_ConfigUnitSelector"]
+            if elem.Refresh then
+                elem:Refresh(list, list[1] or "")
+            elseif elem.SetList then
+                elem:SetList(list, list[1] or "")
+            elseif elem.Clear then
+                elem:Clear()
+                for _, opt in ipairs(list) do
+                    if elem.Add then elem:Add(opt) end
+                end
+                if list[1] and elem.Set then elem:Set(list[1]) end
+            end
+        end)
+    end
+    if #list > 0 then
+        currentM2ConfigUnit = list[1]
+        SyncM2UnitConfigToUI(list[1])
+    else
+        currentM2ConfigUnit = nil
+    end
+end
+
+local function SyncM2UnitConfigToUI(unitName)
+    if not unitName then
+        UpdateUIElement(UIElements.Dropdowns["M2_UnitRarities"], {})
+        UpdateUIElement(UIElements.Dropdowns["M2_UnitMutations"], {})
+        return
+    end
+    local unitClean = CleanName(unitName)
+    local data = Config.Method2_Units[unitClean] or { Rarities = {}, Mutations = {} }
+
+    local rarityValues = {}
+    for rKey, _ in pairs(data.Rarities or {}) do
+        if rKey == "all" then
+            table.insert(rarityValues, "All Rarity")
+        else
+            for _, rName in ipairs(RarityList) do
+                if CleanName(rName) == rKey then
+                    table.insert(rarityValues, rName)
+                    break
+                end
+            end
+        end
+    end
+    UpdateUIElement(UIElements.Dropdowns["M2_UnitRarities"], rarityValues)
+
+    local mutValues = {}
+    for mKey, _ in pairs(data.Mutations or {}) do
+        if mKey == "all" then
+            table.insert(mutValues, "All Mutation")
+        else
+            for _, mName in ipairs(AllMutations) do
+                if CleanName(mName) == mKey then
+                    table.insert(mutValues, mName)
+                    break
+                end
+            end
+        end
+    end
+    UpdateUIElement(UIElements.Dropdowns["M2_UnitMutations"], mutValues)
+end
+
 local function MatchesTargetFilter(charName, mutationName, actualRarity)
     if not charName then return false end
     local charClean = CleanName(charName)
@@ -211,23 +283,27 @@ local function MatchesTargetFilter(charName, mutationName, actualRarity)
     local rarityClean = CleanName(currentRarity)
     local currentMutation = CleanName(mutationName or "No Mutation")
 
-    -- METHOD 2 CHECK
+    -- METHOD 2 CHECK (Multi-Unit v11.0)
     if Config.Method2_Enabled then
         local unitData = Config.Method2_Units[charClean]
         if unitData then
-            local allowedRarities = unitData.Rarity or {}
+            local allowedRarities = unitData.Rarities or {}
+            local allowedMutations = unitData.Mutations or {}
+
+            local hasRarityFilter = false
+            for _ in pairs(allowedRarities) do hasRarityFilter = true; break end
+
+            local hasMutFilter = false
+            for _ in pairs(allowedMutations) do hasMutFilter = true; break end
+
             local isRarityMatch = allowedRarities["all"] == true or allowedRarities[rarityClean] == true
-            
-            if isRarityMatch then
-                local mutFilters = Config.Method2_Mutations[rarityClean] or {}
-                local hasMutFilter = false
-                for _, active in pairs(mutFilters) do
-                    if active then hasMutFilter = true; break end
-                end
-                
-                if not hasMutFilter or mutFilters[currentMutation] == true then
-                    return true
-                end
+            local isMutMatch = allowedMutations["all"] == true or allowedMutations[currentMutation] == true
+
+            local rarityCheck = not hasRarityFilter or isRarityMatch
+            local mutCheck = not hasMutFilter or isMutMatch
+
+            if rarityCheck and mutCheck then
+                return true
             end
         end
     end
@@ -283,7 +359,7 @@ local function ResetConfigToDefault()
     Config.SelectedMutations = {}
     Config.Method2_Enabled = false
     Config.Method2_Units = {}
-    Config.Method2_Mutations = {}
+    Config.Method2_UnitList = {}
     Config.SellRarities = { Common = false, Rare = false, Epic = false, Legendary = false, Mythic = false, Secret = false, God = false, Limited = false }
     Config.SellCharacters = {}
     Config.SellMutations = {}
@@ -324,18 +400,17 @@ local function SyncUIFromConfig()
     UpdateUIElement(UIElements.Toggles["AutoSummon"], Config.AutoSummon)
     UpdateUIElement(UIElements.Toggles["AutoBuy"], Config.AutoBuy)
     UpdateUIElement(UIElements.Toggles["Method2_Enabled"], Config.Method2_Enabled)
-    UpdateUIElement(UIElements.Toggles["AutoSell"], Config.AutoSell)
-    UpdateUIElement(UIElements.Toggles["AutoMerge"], Config.AutoMerge)
-    UpdateUIElement(UIElements.Toggles["AutoSpinWheel"], Config.AutoSpinWheel)
-    UpdateUIElement(UIElements.Toggles["AutoUpgradeGold"], Config.AutoUpgradeGold)
-    UpdateUIElement(UIElements.Toggles["AutoUpgradeLuck"], Config.AutoUpgradeLuck)
-    UpdateUIElement(UIElements.Toggles["AutoUpgradeSlots"], Config.AutoUpgradeSlots)
-    UpdateUIElement(UIElements.Toggles["AutoUpgradeInventory"], Config.AutoUpgradeInventory)
-    UpdateUIElement(UIElements.Toggles["AutoClaimQuests"], Config.AutoClaimQuests)
-    UpdateUIElement(UIElements.Toggles["AutoClaimBP"], Config.AutoClaimBP)
-    UpdateUIElement(UIElements.Toggles["DisplayTag"], Config.DisplayTag)
-    UpdateUIElement(UIElements.Toggles["AntiAFK"], Config.AntiAFK)
-    
+    -- Sync Method 2 Multi-Unit v11.0
+    local m2UnitListValues = {}
+    for _, name in ipairs(Config.Method2_UnitList or {}) do
+        table.insert(m2UnitListValues, name)
+    end
+    UpdateUIElement(UIElements.Dropdowns["M2_UnitSelector"], m2UnitListValues)
+    UpdateM2ConfigUnitSelector()
+    if Config.Method2_UnitList and #Config.Method2_UnitList > 0 then
+        SyncM2UnitConfigToUI(Config.Method2_UnitList[1])
+    end
+
     UpdateUIElement(UIElements.Textboxes["WebhookURL"], Config.WebhookURL)
     UpdateUIElement(UIElements.Textboxes["DiscordUserID"], Config.DiscordUserID)
 
@@ -793,12 +868,12 @@ UIElements.Toggles["AutoBuy"] = TabMain:Toggle({
     end 
 })
 
--- TAB: AUTO BUY METHOD 2 (NEWLY ADDED)
-local TabMethod2 = Window:MakeTab({ Title = "Buy: Method 2 (Custom)", Icon = 115960025411300 })
+-- TAB: AUTO BUY METHOD 2 (Multi-Unit v11.0)
+local TabMethod2 = Window:MakeTab({ Title = "Buy: Method 2 (Multi-Unit)", Icon = 115960025411300 })
 
 UIElements.Toggles["Method2_Enabled"] = TabMethod2:Toggle({
     Title = "Enable Auto Buy Method 2",
-    Desc = "Target specific units with custom Rarity overrides",
+    Desc = "Target multiple specific units with individual Rarity & Mutation filters",
     Value = Config.Method2_Enabled,
     Callback = function(v)
         if isLoadingConfig then return end
@@ -807,67 +882,114 @@ UIElements.Toggles["Method2_Enabled"] = TabMethod2:Toggle({
     end
 })
 
-TabMethod2:Label({ Title = "<font color=\"#00FF7F\">1. SELECT UNIT & ALLOWED RARITIES</font>" })
+TabMethod2:Label({ Title = "<font color=\"#00FF7F\">1. SELECT TARGET UNITS (Multi)</font>" })
 
-local currentSelectedM2Unit = AllUnitsList[1] or "Ainz"
-
-TabMethod2:Dropdown({
-    Title = "Select Target Unit",
+UIElements.Dropdowns["M2_UnitSelector"] = TabMethod2:Dropdown({
+    Title = "Select Target Units",
     List = AllUnitsList,
-    Value = currentSelectedM2Unit,
+    Multi = true,
+    Value = Config.Method2_UnitList or {},
+    Callback = function(selectedList)
+        if isLoadingConfig then return end
+
+        local newUnitList = {}
+        local newUnitsConfig = {}
+
+        if type(selectedList) == "table" then
+            for _, unitName in ipairs(selectedList) do
+                table.insert(newUnitList, unitName)
+                local unitClean = CleanName(unitName)
+                -- Preserve existing config if available
+                newUnitsConfig[unitClean] = Config.Method2_Units[unitClean] or { Rarities = {}, Mutations = {} }
+            end
+        end
+
+        Config.Method2_UnitList = newUnitList
+        Config.Method2_Units = newUnitsConfig
+
+        -- Update Config Unit Selector & sync UI
+        UpdateM2ConfigUnitSelector()
+        SaveAutoState()
+    end
+})
+
+TabMethod2:Label({ Title = "<font color=\"#FFD700\">2. CONFIGURE INDIVIDUAL UNIT</font>" })
+
+UIElements.Dropdowns["M2_ConfigUnitSelector"] = TabMethod2:Dropdown({
+    Title = "Select Unit to Configure",
+    List = {},
+    Value = "",
     Callback = function(selected)
+        if isLoadingConfig then return end
         if type(selected) == "table" then selected = selected[1] end
-        if selected then currentSelectedM2Unit = selected end
+        if selected and selected ~= "" then
+            currentM2ConfigUnit = selected
+            SyncM2UnitConfigToUI(selected)
+        end
     end
 })
 
 local M2_RarityOptions = { "All Rarity", "God", "Secret", "Mythic", "Legendary", "Epic", "Rare", "Common", "Limited" }
 
-TabMethod2:Dropdown({
-    Title = "Set Allowed Rarities For Unit",
+UIElements.Dropdowns["M2_UnitRarities"] = TabMethod2:Dropdown({
+    Title = "Allowed Rarities for Selected Unit",
     List = M2_RarityOptions,
     Multi = true,
+    Value = {},
     Callback = function(selectedList)
-        if isLoadingConfig or not currentSelectedM2Unit then return end
-        local unitClean = CleanName(currentSelectedM2Unit)
-        Config.Method2_Units[unitClean] = Config.Method2_Units[unitClean] or { Rarity = {} }
-        
-        local selectedSet = {}
+        if isLoadingConfig or not currentM2ConfigUnit then return end
+        local unitClean = CleanName(currentM2ConfigUnit)
+        if not unitClean or unitClean == "" then return end
+
+        Config.Method2_Units[unitClean] = Config.Method2_Units[unitClean] or { Rarities = {}, Mutations = {} }
+        local rarities = {}
+
         if type(selectedList) == "table" then
             for _, rName in ipairs(selectedList) do
-                local rClean = CleanName(rName:gsub(" Rarity", ""))
-                selectedSet[rClean] = true
+                local rClean = CleanName(rName)
+                if rClean == "allrarity" then
+                    rarities["all"] = true
+                else
+                    rarities[rClean] = true
+                end
             end
         end
 
-        Config.Method2_Units[unitClean].Rarity = selectedSet
+        Config.Method2_Units[unitClean].Rarities = rarities
         SaveAutoState()
     end
 })
 
-TabMethod2:Label({ Title = "<font color=\"#FFD700\">2. METHOD 2 MUTATION FILTERS</font>" })
+local M2_MutOptions = { "All Mutation", "Astronaut", "Cursed", "Demon", "Destroyer", "Diamond", "Gold", "Hollow", "No Mutation", "Slayer" }
 
-for _, rarityName in ipairs(RarityList) do
-    local rClean = CleanName(rarityName)
-    Config.Method2_Mutations[rClean] = Config.Method2_Mutations[rClean] or {}
+UIElements.Dropdowns["M2_UnitMutations"] = TabMethod2:Dropdown({
+    Title = "Allowed Mutations for Selected Unit",
+    List = M2_MutOptions,
+    Multi = true,
+    Value = {},
+    Callback = function(selectedList)
+        if isLoadingConfig or not currentM2ConfigUnit then return end
+        local unitClean = CleanName(currentM2ConfigUnit)
+        if not unitClean or unitClean == "" then return end
 
-    TabMethod2:Dropdown({
-        Title = rarityName .. " Allowed Mutations",
-        List = AllMutations,
-        Multi = true,
-        Callback = function(selectedList)
-            if isLoadingConfig then return end
-            local selectedSet = {}
-            if type(selectedList) == "table" then
-                for _, mutName in ipairs(selectedList) do
-                    selectedSet[CleanName(mutName)] = true
+        Config.Method2_Units[unitClean] = Config.Method2_Units[unitClean] or { Rarities = {}, Mutations = {} }
+        local mutations = {}
+
+        if type(selectedList) == "table" then
+            for _, mName in ipairs(selectedList) do
+                local mClean = CleanName(mName)
+                if mClean == "allmutation" then
+                    mutations["all"] = true
+                else
+                    mutations[mClean] = true
                 end
             end
-            Config.Method2_Mutations[rClean] = selectedSet
-            SaveAutoState()
         end
-    })
-end
+
+        Config.Method2_Units[unitClean].Mutations = mutations
+        SaveAutoState()
+    end
+})
 
 -- TAB 2: AUTOMATION & UPGRADES
 local TabAutoMore = Window:MakeTab({ Title = "Auto Features", Icon = 115960025411300 })
